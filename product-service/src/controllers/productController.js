@@ -1,104 +1,52 @@
 const productService = require("../services/productService");
 
-async function getAllProducts(req, res) {
-    try {
-        const products =
-            await productService.getAllProducts();
-
-        res.status(200).json({
-            message: "Data produk berhasil diambil",
-            data: products
-        });
-
-    } catch (error) {
-        console.error(error);
-
-        res.status(500).json({
-            message: "Terjadi kesalahan server"
-        });
-    }
+async function getAllProducts(req, res, next) {
+  try {
+    const result = await productService.getAllProducts(req.query);
+    res.json({ message: "Data produk berhasil diambil.", data: result.products, pagination: result.pagination });
+  } catch (error) { next(error); }
 }
 
-async function getProductById(req, res) {
-    try {
-        const product =
-            await productService.getProductById(
-                req.params.id
-            );
-
-        res.status(200).json({
-            data: product
-        });
-
-    } catch (error) {
-        res.status(404).json({
-            message: error.message
-        });
-    }
+async function getProductById(req, res, next) {
+  try {
+    const product = await productService.getProductById(req.params.id);
+    res.json({ data: product });
+  } catch (error) { next(error); }
 }
 
-async function createProduct(req, res) {
-    try {
-        const product =
-            await productService.createProduct(
-                req.body
-            );
-
-        res.status(201).json({
-            message: "Produk berhasil dibuat",
-            data: product
-        });
-
-    } catch (error) {
-        res.status(400).json({
-            message: error.message
-        });
-    }
+async function createProduct(req, res, next) {
+  try {
+    const product = await productService.createProduct(req.body);
+    res.status(201).json({ message: "Produk berhasil dibuat.", data: product });
+  } catch (error) { next(error); }
 }
 
-async function updateProduct(req, res) {
-    try {
-        const product =
-            await productService.updateProduct(
-                req.params.id,
-                req.body
-            );
-
-        res.status(200).json({
-            message: "Produk berhasil diperbarui",
-            data: product
-        });
-
-    } catch (error) {
-        res.status(400).json({
-            message: error.message
-        });
-    }
+async function updateProduct(req, res, next) {
+  try {
+    const product = await productService.updateProduct(req.params.id, req.body);
+    res.json({ message: "Produk berhasil diperbarui.", data: product });
+  } catch (error) { next(error); }
 }
 
-async function deleteProduct(req, res) {
-    try {
-        const product =
-            await productService.deleteProduct(
-                req.params.id
-            );
-
-        res.status(200).json({
-            message: "Produk berhasil dihapus",
-            data: product
-        });
-
-    } catch (error) {
-        res.status(404).json({
-            message: error.message
-        });
-    }
+async function deleteProduct(req, res, next) {
+  try {
+    const product = await productService.deleteProduct(req.params.id);
+    res.json({ message: "Produk berhasil dihapus.", data: product });
+  } catch (error) { next(error); }
 }
 
-module.exports = {
-    getAllProducts,
-    getProductById,
-    createProduct,
-    updateProduct,
-    deleteProduct
-};
+async function reserveStock(req, res, next) {
+  try {
+    const product = await productService.reserveStock(req.params.id, req.body.quantity);
+    res.json({ message: "Stok berhasil direservasi.", data: product });
+  } catch (error) { next(error); }
+}
+
+async function releaseStock(req, res, next) {
+  try {
+    const product = await productService.releaseStock(req.params.id, req.body.quantity);
+    res.json({ message: "Reservasi stok berhasil dikembalikan.", data: product });
+  } catch (error) { next(error); }
+}
+
+module.exports = { getAllProducts, getProductById, createProduct, updateProduct, deleteProduct, reserveStock, releaseStock };

@@ -1,48 +1,37 @@
 require("dotenv").config();
 
 const express = require("express");
-const cors = require("cors");
-
-const orderRoutes =
-    require("./routes/orderRoutes");
-
-const {
-    pool
-} = require("./repositories/orderRepository");
+const helmet = require("helmet");
+const orderRoutes = require("./routes/orderRoutes");
+const { pool } = require("./config/database");
+const { notFoundHandler, errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
-
-app.use(cors());
-app.use(express.json());
+app.use(helmet());
+app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", async (req, res) => {
-    try {
-        await pool.query("SELECT 1");
-
-        res.json({
-            service: "order-service",
-            status: "online",
-            database: "connected"
-        });
-
-    } catch (error) {
-        console.error(error);
-
-        res.status(500).json({
-            service: "order-service",
-            status: "offline",
-            database: "disconnected"
-        });
-    }
+  try {
+    await pool.query("SELECT 1");
+    res.json({ service: "order-service", status: "online", database: "connected" });
+  } catch (error) {
+    console.error("Order Service health check failed:", error.message);
+    res.status(503).json({ service: "order-service", status: "offline", database: "disconnected" });
+  }
 });
 
 app.use("/orders", orderRoutes);
+app.use(notFoundHandler);
+app.use(errorHandler);
 
-const PORT =
-    process.env.PORT || 3003;
+const PORT = Number(process.env.PORT || 3003);
+const server = app.listen(PORT, () => console.log(`Order Service berjalan pada port ${PORT}`));
 
-app.listen(PORT, () => {
-    console.log(
-        `Order Service berjalan di http://localhost:${PORT}`
-    );
-});
+async function shutdown() {
+  server.close(async () => { await pool.end(); process.exit(0); });
+  setTimeout(() => process.exit(1), 10000).unref();
+}
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
+
+module.exports = app;

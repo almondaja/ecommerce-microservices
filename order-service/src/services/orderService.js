@@ -1,151 +1,175 @@
 const axios = require("axios");
-
 const orderRepository = require("../repositories/orderRepository");
 
-async function createOrder(userId, items) {
-    if (!userId) {
-        throw new Error("user_id wajib diisi");
+function httpError(message, statusCode = 400) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function normalizeItems(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw httpError("Keranjang pesanan tidak boleh kosong.");
+  }
+  const combined = new Map();
+  for (const item of items) {
+    const productId = Number(item.product_id);
+    const quantity = Number(item.quantity);
+    if (!Number.isSafeInteger(productId) || productId < 1) {
+      throw httpError("product_id harus berupa bilangan bulat positif.");
     }
-
-    if (!Array.isArray(items) || items.length === 0) {
-        throw new Error("Item pesanan wajib diisi");
+    if (!Number.isSafeInteger(quantity) || quantity < 1) {
+      throw httpError("quantity harus berupa bilangan bulat positif.");
     }
+    combined.set(productId, (combined.get(productId) || 0) + quantity);
+  }
+  return [...combined.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
+}
 
-    const processedItems = [];
-
-    for (const item of items) {
-        if (!item.product_id || !item.quantity) {
-            throw new Error(
-                "product_id dan quantity wajib diisi"
-            );
-        }
-
-        if (Number(item.quantity) <= 0) {
-            throw new Error(
-                "Quantity harus lebih dari 0"
-            );
-        }
-
-        const response = await axios.get(
-            `${process.env.PRODUCT_SERVICE_URL}/products/${item.product_id}`
-        );
-
-        const product = response.data.data;
-
-        if (!product) {
-            throw new Error(
-                `Produk ${item.product_id} tidak ditemukan`
-            );
-        }
-
-        if (Number(product.stock) < Number(item.quantity)) {
-            throw new Error(
-                `Stok ${product.name} tidak mencukupi`
-            );
-        }
-
-        const subtotal =
-            Number(product.price) *
-            Number(item.quantity);
-
-        processedItems.push({
-            product_id: product.id,
-            product_name: product.name,
-            price: Number(product.price),
-            quantity: Number(item.quantity),
-            subtotal
-        });
-    }
-
-    const total = processedItems.reduce(
-        (sum, item) => sum + item.subtotal,
-        0
+async function reserveProduct(productId, quantity) {
+  const baseUrl = (process.env.PRODUCT_SERVICE_URL || "http://localhost:3002").replace(/\/$/, "");
+  const token = process.env.INTERNAL_SERVICE_TOKEN;
+  if (!token) throw httpError("INTERNAL_SERVICE_TOKEN belum dikonfigurasi.", 500);
+  try {
+    const response = await axios.post(
+      `${baseUrl}/products/internal/${productId}/reserve`,
+      { quantity },
+      { headers: { "x-internal-token": token }, timeout: 7000 }
     );
-
-    const client =
-        await orderRepository.pool.connect();
-
-    try {
-        await client.query("BEGIN");
-
-        const order =
-            await orderRepository.createOrder(
-                userId,
-                total,
-                "PENDING_PAYMENT",
-                client
-            );
-
-        for (const item of processedItems) {
-            await orderRepository.createOrderItem(
-                order.id,
-                item.product_id,
-                item.product_name,
-                item.price,
-                item.quantity,
-                item.subtotal,
-                client
-            );
-        }
-
-        await client.query("COMMIT");
-
-        return await orderRepository.findById(order.id);
-
-    } catch (error) {
-        await client.query("ROLLBACK");
-        throw error;
-
-    } finally {
-        client.release();
+    return response.data.data;
+  } catch (error) {
+    if (error.response) {
+      throw httpError(error.response.data?.message || "Reservasi stok produk gagal.", error.response.status);
     }
+    throw httpError("Product Service tidak dapat dihubungi. Periksa PRODUCT_SERVICE_URL dan pastikan Product Service berjalan.", 503);
+  }
 }
 
-async function getOrders() {
-    return await orderRepository.findAll();
+async function releaseProduct(productId, quantity) {
+  const baseUrl = (process.env.PRODUCT_SERVICE_URL || "http://localhost:3002").replace(/\/$/, "");
+  const token = process.env.INTERNAL_SERVICE_TOKEN;
+  try {
+    await axios.post(
+      `${baseUrl}/products/internal/${productId}/release`,
+      { quantity },
+      { headers: { "x-internal-token": token }, timeout: 7000 }
+    );
+  } catch (error) {
+    console.error(`Gagal mengembalikan stok produk ${productId}:`, error.message);
+  }
 }
 
-async function getOrderById(id) {
-    const order =
-        await orderRepository.findById(id);
+async function createOrder(userId, rawItems) {
+  const parsedUserId = Number(userId);
+  if (!Number.isSafeInteger(parsedUserId) || parsedUserId < 1) {
+    throw httpError("Identitas pengguna tidak valid.", 401);
+  }
 
-    if (!order) {
-        throw new Error("Order tidak ditemukan");
+  const items = normalizeItems(rawItems);
+  const reservations = [];
+  const processedItems = [];
+  let client;
+  let committed = false;
+
+  try {
+    for (const item of items) {
+      const product = await reserveProduct(item.product_id, item.quantity);
+      reservations.push({ product_id: item.product_id, quantity: item.quantity });
+      const price = Number(product.price);
+      if (!Number.isFinite(price) || price < 0) throw httpError("Harga produk dari Product Service tidak valid.", 502);
+      const priceCents = Math.round(price * 100);
+      const subtotal = ((priceCents * item.quantity) / 100).toFixed(2);
+      processedItems.push({
+        product_id: Number(product.id),
+        product_name: product.name,
+        price: (priceCents / 100).toFixed(2),
+        quantity: item.quantity,
+        subtotal
+      });
     }
 
-    return order;
+    const totalCents = processedItems.reduce((sum, item) => sum + Math.round(Number(item.subtotal) * 100), 0);
+    const total = (totalCents / 100).toFixed(2);
+
+    client = await orderRepository.pool.connect();
+    await client.query("BEGIN");
+    const order = await orderRepository.createOrder(parsedUserId, total, client);
+    for (const item of processedItems) {
+      await orderRepository.createOrderItem(order.id, item, client);
+    }
+    await client.query("COMMIT");
+    committed = true;
+
+    return await orderRepository.findById(order.id, parsedUserId, false);
+  } catch (error) {
+    if (client && !committed) {
+      try { await client.query("ROLLBACK"); } catch (rollbackError) {
+        console.error("Order transaction rollback failed:", rollbackError.message);
+      }
+    }
+    if (!committed) {
+      await Promise.allSettled(reservations.map((item) => releaseProduct(item.product_id, item.quantity)));
+    }
+    throw error;
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function getOrders(user) {
+  return orderRepository.findAll(Number(user.id), user.role === "admin");
+}
+
+async function getOrderById(id, user) {
+  const parsedId = Number(id);
+  if (!Number.isSafeInteger(parsedId) || parsedId < 1) throw httpError("ID pesanan tidak valid.");
+  const order = await orderRepository.findById(parsedId, Number(user.id), user.role === "admin");
+  if (!order) throw httpError("Pesanan tidak ditemukan.", 404);
+  return order;
+}
+
+async function getOrderInternal(id) {
+  const parsedId = Number(id);
+  if (!Number.isSafeInteger(parsedId) || parsedId < 1) throw httpError("ID pesanan tidak valid.");
+  const order = await orderRepository.findByIdInternal(parsedId);
+  if (!order) throw httpError("Pesanan tidak ditemukan.", 404);
+  return order;
 }
 
 async function updateOrderStatus(id, status) {
-    const allowedStatuses = [
-        "PENDING_PAYMENT",
-        "PAID",
-        "PROCESSING",
-        "SHIPPED",
-        "COMPLETED",
-        "CANCELLED"
-    ];
+  const transitions = {
+    PENDING_PAYMENT: ["PAID", "CANCELLED"],
+    PAID: ["PROCESSING"],
+    PROCESSING: ["SHIPPED"],
+    SHIPPED: ["COMPLETED"],
+    COMPLETED: [],
+    CANCELLED: []
+  };
+  if (!Object.hasOwn(transitions, status)) throw httpError("Status pesanan tidak valid.");
 
-    if (!allowedStatuses.includes(status)) {
-        throw new Error("Status order tidak valid");
+  const client = await orderRepository.pool.connect();
+  let order;
+  try {
+    await client.query("BEGIN");
+    const current = await orderRepository.findByIdInternal(id, client);
+    if (!current) throw httpError("Pesanan tidak ditemukan.", 404);
+    if (!transitions[current.status].includes(status)) {
+      throw httpError(`Perubahan status dari ${current.status} ke ${status} tidak diizinkan.`, 409);
     }
+    order = await orderRepository.updateStatus(id, status, client);
+    await client.query("COMMIT");
+  } catch (error) {
+    try { await client.query("ROLLBACK"); } catch (_rollbackError) {}
+    throw error;
+  } finally {
+    client.release();
+  }
 
-    const order =
-        await orderRepository.findById(id);
-
-    if (!order) {
-        throw new Error("Order tidak ditemukan");
-    }
-
-    return await orderRepository.updateStatus(
-        id,
-        status
-    );
+  if (status === "CANCELLED" && order) {
+    const cancelledOrder = await orderRepository.findByIdInternal(id);
+    await Promise.allSettled((cancelledOrder.items || []).map((item) => releaseProduct(item.product_id, item.quantity)));
+  }
+  return order;
 }
 
-module.exports = {
-    createOrder,
-    getOrders,
-    getOrderById,
-    updateOrderStatus
-};
+module.exports = { createOrder, getOrders, getOrderById, getOrderInternal, updateOrderStatus };

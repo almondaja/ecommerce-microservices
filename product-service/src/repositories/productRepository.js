@@ -1,105 +1,84 @@
-const { Pool } = require("pg");
+const { pool } = require("../config/database");
 
-const pool = new Pool({
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    database: process.env.DB_NAME,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD
-});
+async function findAll({ search, category, limit, offset }) {
+  const conditions = [];
+  const values = [];
 
-async function findAll() {
-    const result = await pool.query(
-        `SELECT *
-         FROM products
-         ORDER BY id ASC`
-    );
+  if (search) {
+    values.push(`%${search}%`);
+    conditions.push(`(name ILIKE $${values.length} OR description ILIKE $${values.length})`);
+  }
+  if (category) {
+    values.push(category);
+    conditions.push(`category ILIKE $${values.length}`);
+  }
 
-    return result.rows;
+  const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const countResult = await pool.query(
+    `SELECT COUNT(*)::int AS total FROM products ${whereClause}`,
+    values
+  );
+
+  values.push(limit, offset);
+  const result = await pool.query(
+    `SELECT * FROM products ${whereClause}
+     ORDER BY id DESC
+     LIMIT $${values.length - 1} OFFSET $${values.length}`,
+    values
+  );
+
+  return { items: result.rows, total: countResult.rows[0].total };
 }
 
-async function findById(id) {
-    const result = await pool.query(
-        `SELECT *
-         FROM products
-         WHERE id = $1`,
-        [id]
-    );
-
-    return result.rows[0];
+async function findById(id, client = pool) {
+  const result = await client.query("SELECT * FROM products WHERE id = $1", [id]);
+  return result.rows[0] || null;
 }
 
-async function createProduct(
-    name,
-    category,
-    price,
-    stock,
-    description
-) {
-    const result = await pool.query(
-        `INSERT INTO products
-        (name, category, price, stock, description)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING *`,
-        [
-            name,
-            category,
-            price,
-            stock,
-            description
-        ]
-    );
-
-    return result.rows[0];
+async function create(data) {
+  const result = await pool.query(
+    `INSERT INTO products (name, category, price, stock, description)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [data.name, data.category, data.price, data.stock, data.description]
+  );
+  return result.rows[0];
 }
 
-async function updateProduct(
-    id,
-    name,
-    category,
-    price,
-    stock,
-    description
-) {
-    const result = await pool.query(
-        `UPDATE products
-         SET
-            name = $1,
-            category = $2,
-            price = $3,
-            stock = $4,
-            description = $5
-         WHERE id = $6
-         RETURNING *`,
-        [
-            name,
-            category,
-            price,
-            stock,
-            description,
-            id
-        ]
-    );
-
-    return result.rows[0];
+async function update(id, data) {
+  const result = await pool.query(
+    `UPDATE products
+     SET name = $1, category = $2, price = $3, stock = $4, description = $5
+     WHERE id = $6 RETURNING *`,
+    [data.name, data.category, data.price, data.stock, data.description, id]
+  );
+  return result.rows[0] || null;
 }
 
-async function deleteProduct(id) {
-    const result = await pool.query(
-        `DELETE FROM products
-         WHERE id = $1
-         RETURNING *`,
-        [id]
-    );
-
-    return result.rows[0];
+async function remove(id) {
+  const result = await pool.query("DELETE FROM products WHERE id = $1 RETURNING *", [id]);
+  return result.rows[0] || null;
 }
 
-module.exports = {
-    pool,
-    findAll,
-    findById,
-    createProduct,
-    updateProduct,
-    deleteProduct
-};
+async function reserveStock(id, quantity) {
+  const result = await pool.query(
+    `UPDATE products
+     SET stock = stock - $1
+     WHERE id = $2 AND stock >= $1
+     RETURNING *`,
+    [quantity, id]
+  );
+  return result.rows[0] || null;
+}
+
+async function releaseStock(id, quantity) {
+  const result = await pool.query(
+    `UPDATE products
+     SET stock = stock + $1
+     WHERE id = $2
+     RETURNING *`,
+    [quantity, id]
+  );
+  return result.rows[0] || null;
+}
+
+module.exports = { findAll, findById, create, update, remove, reserveStock, releaseStock };
