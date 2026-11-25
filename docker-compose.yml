@@ -1,4 +1,22 @@
 services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: ecommerce-rabbitmq
+    restart: unless-stopped
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-ecommerce}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-change-rabbitmq-password}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   user-db:
     image: postgres:16-alpine
     container_name: ecommerce-user-db
@@ -146,11 +164,14 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-this-to-a-long-random-secret}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-this-to-another-long-random-token}
       PRODUCT_SERVICE_URL: http://product-service:3002
+      AMQP_URL: ${AMQP_URL:-amqp://${RABBITMQ_USER:-ecommerce}:${RABBITMQ_PASSWORD:-change-rabbitmq-password}@rabbitmq:5672}
     depends_on:
       order-db:
         condition: service_healthy
       product-service:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
     ports:
       - "3003:3003"
 
@@ -169,11 +190,14 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-this-to-a-long-random-secret}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-this-to-another-long-random-token}
       ORDER_SERVICE_URL: http://order-service:3003
+      AMQP_URL: ${AMQP_URL:-amqp://${RABBITMQ_USER:-ecommerce}:${RABBITMQ_PASSWORD:-change-rabbitmq-password}@rabbitmq:5672}
     depends_on:
       payment-db:
         condition: service_healthy
       order-service:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
     ports:
       - "3004:3004"
 
@@ -214,3 +238,4 @@ volumes:
   product_db_data:
   order_db_data:
   payment_db_data:
+  rabbitmq_data:

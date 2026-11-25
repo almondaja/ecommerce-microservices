@@ -21,6 +21,14 @@ const allowedOrigins = process.env.CORS_ORIGIN
 app.use(helmet());
 app.use(cors({ origin: allowedOrigins }));
 
+// Liveness probe: confirms the gateway process is accepting HTTP requests.
+// Keep this independent from database readiness so Render does not restart a
+// healthy process while Neon is waking from its free-tier idle state.
+app.get("/health/live", (_req, res) => {
+  res.status(200).json({ service: "api-gateway", status: "alive" });
+});
+
+// Readiness/dependency probe: checks all backend services and their databases.
 app.get("/health", async (req, res) => {
   const entries = await Promise.all(Object.entries(services).map(async ([name, baseUrl]) => {
     try {
@@ -65,6 +73,6 @@ app.use(proxy("/payments", services.payment));
 
 app.use((req, res) => res.status(404).json({ message: "Endpoint tidak ditemukan pada API Gateway." }));
 
-app.listen(PORT, () => console.log(`API Gateway berjalan pada port ${PORT}`));
+app.listen(PORT, process.env.HOST || "0.0.0.0", () => console.log(`API Gateway berjalan pada port ${PORT}`));
 
 module.exports = app;

@@ -5,6 +5,7 @@ const helmet = require("helmet");
 const orderRoutes = require("./routes/orderRoutes");
 const { pool } = require("./config/database");
 const { notFoundHandler, errorHandler } = require("./middleware/errorHandler");
+const { closePublisher } = require("./messaging/eventPublisher");
 
 const app = express();
 app.use(helmet());
@@ -25,10 +26,10 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 const PORT = Number(process.env.PORT || 3003);
-const server = app.listen(PORT, () => console.log(`Order Service berjalan pada port ${PORT}`));
+const server = app.listen(PORT, process.env.HOST || "0.0.0.0", () => console.log(`Order Service berjalan pada port ${PORT}`));
 
 async function shutdown() {
-  server.close(async () => { await pool.end(); process.exit(0); });
+  server.close(async () => { await closePublisher(); await pool.end(); process.exit(0); });
   setTimeout(() => process.exit(1), 10000).unref();
 }
 process.on("SIGTERM", shutdown);

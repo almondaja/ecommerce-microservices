@@ -12,3 +12,17 @@ CREATE TABLE IF NOT EXISTS payments (
 
 CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments (user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_status ON payments (status);
+
+
+CREATE TABLE IF NOT EXISTS payment_order_events (
+  event_id UUID PRIMARY KEY,
+  order_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
+  event_type VARCHAR(50) NOT NULL,
+  payload JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_order_events_order_id
+ON payment_order_events (order_id);

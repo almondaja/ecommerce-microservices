@@ -1,0 +1,238 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: ecommerce-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-ecommerce}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-change-rabbitmq-password}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  user-db:
+    image: postgres:16-alpine
+    container_name: ecommerce-user-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${USER_DB_NAME:-ecommerce_user_db}
+      POSTGRES_USER: ${USER_DB_USER:-ecommerce_user}
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD:-change-user-db-password}
+    ports:
+      - "${USER_DB_PORT:-5433}:5432"
+    volumes:
+      - user_db_data:/var/lib/postgresql/data
+      - ./user-service/database/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${USER_DB_USER:-ecommerce_user} -d ${USER_DB_NAME:-ecommerce_user_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  product-db:
+    image: postgres:16-alpine
+    container_name: ecommerce-product-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PRODUCT_DB_NAME:-ecommerce_product_db}
+      POSTGRES_USER: ${PRODUCT_DB_USER:-ecommerce_product}
+      POSTGRES_PASSWORD: ${PRODUCT_DB_PASSWORD:-change-product-db-password}
+    ports:
+      - "${PRODUCT_DB_PORT:-5434}:5432"
+    volumes:
+      - product_db_data:/var/lib/postgresql/data
+      - ./product-service/database/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PRODUCT_DB_USER:-ecommerce_product} -d ${PRODUCT_DB_NAME:-ecommerce_product_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  order-db:
+    image: postgres:16-alpine
+    container_name: ecommerce-order-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${ORDER_DB_NAME:-ecommerce_order_db}
+      POSTGRES_USER: ${ORDER_DB_USER:-ecommerce_order}
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:-change-order-db-password}
+    ports:
+      - "${ORDER_DB_PORT:-5435}:5432"
+    volumes:
+      - order_db_data:/var/lib/postgresql/data
+      - ./order-service/database/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ORDER_DB_USER:-ecommerce_order} -d ${ORDER_DB_NAME:-ecommerce_order_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  payment-db:
+    image: postgres:16-alpine
+    container_name: ecommerce-payment-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PAYMENT_DB_NAME:-ecommerce_payment_db}
+      POSTGRES_USER: ${PAYMENT_DB_USER:-ecommerce_payment}
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:-change-payment-db-password}
+    ports:
+      - "${PAYMENT_DB_PORT:-5436}:5432"
+    volumes:
+      - payment_db_data:/var/lib/postgresql/data
+      - ./payment-service/database/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER:-ecommerce_payment} -d ${PAYMENT_DB_NAME:-ecommerce_payment_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  product-seed:
+    image: postgres:16-alpine
+    container_name: ecommerce-product-seed
+    restart: "no"
+    environment:
+      PGPASSWORD: ${PRODUCT_DB_PASSWORD:-change-product-db-password}
+    volumes:
+      - ./product-service/database/seed.sql:/seed.sql:ro
+    command: ["sh", "-c", "psql -h product-db -U ${PRODUCT_DB_USER:-ecommerce_product} -d ${PRODUCT_DB_NAME:-ecommerce_product_db} -v ON_ERROR_STOP=1 -f /seed.sql"]
+    depends_on:
+      product-db:
+        condition: service_healthy
+
+  user-service:
+    build: ./user-service
+    container_name: ecommerce-user-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_HOST: user-db
+      DB_PORT: 5432
+      DB_NAME: ${USER_DB_NAME:-ecommerce_user_db}
+      DB_USER: ${USER_DB_USER:-ecommerce_user}
+      DB_PASSWORD: ${USER_DB_PASSWORD:-change-user-db-password}
+      JWT_SECRET: ${JWT_SECRET:-change-this-to-a-long-random-secret}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:3000,http://localhost:8080}
+    depends_on:
+      user-db:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+
+  product-service:
+    build: ./product-service
+    container_name: ecommerce-product-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      DB_HOST: product-db
+      DB_PORT: 5432
+      DB_NAME: ${PRODUCT_DB_NAME:-ecommerce_product_db}
+      DB_USER: ${PRODUCT_DB_USER:-ecommerce_product}
+      DB_PASSWORD: ${PRODUCT_DB_PASSWORD:-change-product-db-password}
+      JWT_SECRET: ${JWT_SECRET:-change-this-to-a-long-random-secret}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-this-to-another-long-random-token}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:3000,http://localhost:8080}
+    depends_on:
+      product-db:
+        condition: service_healthy
+      product-seed:
+        condition: service_completed_successfully
+    ports:
+      - "3002:3002"
+
+  order-service:
+    build: ./order-service
+    container_name: ecommerce-order-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      DB_HOST: order-db
+      DB_PORT: 5432
+      DB_NAME: ${ORDER_DB_NAME:-ecommerce_order_db}
+      DB_USER: ${ORDER_DB_USER:-ecommerce_order}
+      DB_PASSWORD: ${ORDER_DB_PASSWORD:-change-order-db-password}
+      JWT_SECRET: ${JWT_SECRET:-change-this-to-a-long-random-secret}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-this-to-another-long-random-token}
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      AMQP_URL: ${AMQP_URL:-amqp://${RABBITMQ_USER:-ecommerce}:${RABBITMQ_PASSWORD:-change-rabbitmq-password}@rabbitmq:5672}
+    depends_on:
+      order-db:
+        condition: service_healthy
+      product-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "3003:3003"
+
+  payment-service:
+    build: ./payment-service
+    container_name: ecommerce-payment-service
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3004
+      DB_HOST: payment-db
+      DB_PORT: 5432
+      DB_NAME: ${PAYMENT_DB_NAME:-ecommerce_payment_db}
+      DB_USER: ${PAYMENT_DB_USER:-ecommerce_payment}
+      DB_PASSWORD: ${PAYMENT_DB_PASSWORD:-change-payment-db-password}
+      JWT_SECRET: ${JWT_SECRET:-change-this-to-a-long-random-secret}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-this-to-another-long-random-token}
+      ORDER_SERVICE_URL: http://order-service:3003
+      AMQP_URL: ${AMQP_URL:-amqp://${RABBITMQ_USER:-ecommerce}:${RABBITMQ_PASSWORD:-change-rabbitmq-password}@rabbitmq:5672}
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      order-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "3004:3004"
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: ecommerce-api-gateway
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      USER_SERVICE_URL: http://user-service:3001
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      ORDER_SERVICE_URL: http://order-service:3003
+      PAYMENT_SERVICE_URL: http://payment-service:3004
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:3000,http://localhost:8080}
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+      - payment-service
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:3000
+    container_name: ecommerce-frontend
+    restart: unless-stopped
+    depends_on:
+      - api-gateway
+    ports:
+      - "8080:80"
+
+volumes:
+  user_db_data:
+  product_db_data:
+  order_db_data:
+  payment_db_data:

@@ -1,5 +1,6 @@
 const axios = require("axios");
 const orderRepository = require("../repositories/orderRepository");
+const { publishOrderCreated } = require("../messaging/eventPublisher");
 
 function httpError(message, statusCode = 400) {
   const error = new Error(message);
@@ -100,7 +101,14 @@ async function createOrder(userId, rawItems) {
     await client.query("COMMIT");
     committed = true;
 
-    return await orderRepository.findById(order.id, parsedUserId, false);
+    const savedOrder = await orderRepository.findById(order.id, parsedUserId, false);
+    try {
+      await publishOrderCreated(savedOrder);
+    } catch (eventError) {
+      // Order creation must not fail just because the asynchronous event broker is unavailable.
+      console.error("Order berhasil dibuat, tetapi event order.created gagal dipublikasikan:", eventError.message);
+    }
+    return savedOrder;
   } catch (error) {
     if (client && !committed) {
       try { await client.query("ROLLBACK"); } catch (rollbackError) {

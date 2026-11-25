@@ -31,7 +31,7 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 const PORT = Number(process.env.PORT || 3002);
-const server = app.listen(PORT, () => console.log(`Product Service berjalan pada port ${PORT}`));
+const server = app.listen(PORT, process.env.HOST || "0.0.0.0", () => console.log(`Product Service berjalan pada port ${PORT}`));
 
 async function shutdown() {
   server.close(async () => { await pool.end(); process.exit(0); });
