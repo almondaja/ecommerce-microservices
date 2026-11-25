@@ -96,4 +96,4 @@ Deployment production dilakukan pada 25 November 2026:
 - `/health/live` mengembalikan HTTP 200 dan `/health` melaporkan Gateway serta empat service online.
 - Frontend berhasil memuat katalog 8 produk; CORS preflight dari origin frontend berhasil.
 
-Deployment dikirim dari workspace lokal melalui Vercel CLI. Git auto-deploy belum dihubungkan, dan alur checkout → pembayaran → event AMQP belum diverifikasi end-to-end pada deployment publik.
+Kedua project Vercel terhubung ke repository GitHub dan branch `main`; push berikutnya akan memicu deployment otomatis. Alur checkout → pembayaran → event AMQP belum diverifikasi end-to-end pada deployment publik.

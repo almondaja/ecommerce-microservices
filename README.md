@@ -361,4 +361,4 @@ Panduan deployment Vercel, Neon, dan CloudAMQP ada di [deploy/VERCEL.md](deploy/
 
 **Deployment publik aktif sejak 25 November 2026:** [Frontend](https://nusamarket-frontend.vercel.app) dan [Backend API](https://nusamarket-backend.vercel.app). Verifikasi: frontend memuat 8 produk, `/health/live` mengembalikan HTTP 200, `/health` melaporkan semua service online, dan CORS preflight dari frontend berhasil. Checkout, pembayaran, dan event AMQP belum diuji end-to-end di deployment publik.
 
-Deployment dikirim dari workspace lokal melalui Vercel CLI; Git auto-deploy belum dihubungkan. Jangan mengirim password, token, connection string, atau file `.env` lewat chat.
+Kedua project Vercel kini terhubung ke repository GitHub dan branch `main`; push berikutnya akan memicu deployment otomatis. Jangan mengirim password, token, connection string, atau file `.env` lewat chat.

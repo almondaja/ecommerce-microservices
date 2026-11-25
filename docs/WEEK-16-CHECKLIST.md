@@ -15,7 +15,7 @@ Status di bawah membedakan implementasi kode, pengujian yang benar-benar dijalan
 | 12 | Integrasi dan message broker | REST antar-service dan publisher/consumer AMQP `order.created` | Kode tersedia; penerimaan event cloud/lokal melalui transaksi belum dibuktikan dalam test terbaru |
 | 13 | System testing & bug fixing | 11 container berjalan; `/health` online; 10 pemeriksaan smoke test API lulus | Sebagian besar pemeriksaan smoke lulus; full regression/integration test masih pending |
 | 14 | UAT & penyempurnaan | Skenario UAT tersedia dalam test plan; belum ada catatan peserta, screenshot, atau hasil UAT browser | Belum selesai |
-| 15 | Deployment & dokumentasi | Frontend dan backend aktif di Vercel; endpoint health, CORS, dan katalog publik diverifikasi | Deployment publik aktif; checkout/pembayaran end-to-end dan Git auto-deploy masih pending |
+| 15 | Deployment & dokumentasi | Frontend/backend aktif di Vercel dan terhubung ke GitHub branch `main`; endpoint health, CORS, dan katalog publik diverifikasi | Deployment publik dan auto-deploy aktif; checkout/pembayaran end-to-end masih pending |
 | 16 | Demo, laporan akhir, retrospective, presentasi | README berisi alur demo dan outline slide; belum ada bukti demo, laporan final, retrospective, atau slide aktual | Belum selesai |
 
 ## Pemeriksaan lokal terakhir
@@ -37,6 +37,7 @@ Pada 25 November 2026:
 - [ ] Verifikasi event `order.created` benar-benar diterima dan dicatat Payment Service.
 - [ ] Lakukan UAT browser pembeli/admin; catat peserta, skenario, hasil aktual, bug, dan bukti screenshot.
 - [x] Deploy frontend/backend dengan URL publik; frontend menampilkan 8 produk, backend health/readiness online, dan CORS preflight berhasil (25 November 2026).
+- [x] Hubungkan project Vercel frontend/backend ke repository GitHub dan branch `main`.
 - [ ] Verifikasi checkout → pembayaran → event `order.created` pada deployment publik.
 - [ ] Pastikan `.env` dan semua secret tidak berada di commit/repository.
 - [ ] Lengkapi laporan akhir dengan artefak requirement/desain, arsitektur, hasil test/UAT, batasan, dan retrospective.
