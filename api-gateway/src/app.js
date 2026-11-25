@@ -22,8 +22,7 @@ app.use(helmet());
 app.use(cors({ origin: allowedOrigins }));
 
 // Liveness probe: confirms the gateway process is accepting HTTP requests.
-// Keep this independent from database readiness so Render does not restart a
-// healthy process while Neon is waking from its free-tier idle state.
+// Keep this independent from database readiness because Neon can scale to zero.
 app.get("/health/live", (_req, res) => {
   res.status(200).json({ service: "api-gateway", status: "alive" });
 });

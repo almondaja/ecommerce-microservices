@@ -1,5 +1,7 @@
 # Panduan deployment gratis NusaMarket
 
+> **Panduan legacy Render.** Render meminta metode pembayaran pada akun yang digunakan, jadi panduan deployment aktif telah dipindahkan ke [Vercel, Neon, dan CloudAMQP](VERCEL.md). Ikuti panduan baru tersebut untuk deployment saat ini.
+
 Panduan ini untuk demo/UAS, bukan penggunaan produksi. Rancangan menggunakan:
 
 | Bagian | Provider/plan | Peran |

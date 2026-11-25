@@ -22,5 +22,8 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Vercel project links
+.vercel/
+
 # Frontend build output
 dist/

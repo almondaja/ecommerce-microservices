@@ -357,6 +357,8 @@ Sebelum presentasi, pastikan stack sudah menyala, katalog terisi, akun buyer/adm
 
 ## Deployment gratis
 
-Panduan deployment publik dan batasan free-tier ada di [deploy/README.md](deploy/README.md). Arsitektur panduan saat ini menggunakan Render Static Site untuk frontend, Render Free Web Service untuk backend, Neon Free untuk PostgreSQL, dan CloudAMQP free AMQP broker.
+Panduan deployment Vercel, Neon, dan CloudAMQP ada di [deploy/VERCEL.md](deploy/VERCEL.md). Deployment memakai Vercel Hobby dan Container Runtime untuk backend, serta Vercel untuk frontend. Container Runtime Vercel masih Beta dan seluruh proses backend berbagi satu container; periksa kuota Hobby sebelum demo.
 
-**Belum ada URL cloud yang aktif saat ini.** Deployment nyata memerlukan akun yang dikelola pemilik proyek, pembuatan database/broker, secret environment, dan repository Git yang terhubung ke provider. Jangan mengirim password, token, connection string, atau file `.env` lewat chat.
+**Deployment publik aktif sejak 25 November 2026:** [Frontend](https://nusamarket-frontend.vercel.app) dan [Backend API](https://nusamarket-backend.vercel.app). Verifikasi: frontend memuat 8 produk, `/health/live` mengembalikan HTTP 200, `/health` melaporkan semua service online, dan CORS preflight dari frontend berhasil. Checkout, pembayaran, dan event AMQP belum diuji end-to-end di deployment publik.
+
+Deployment dikirim dari workspace lokal melalui Vercel CLI; Git auto-deploy belum dihubungkan. Jangan mengirim password, token, connection string, atau file `.env` lewat chat.
